@@ -225,7 +225,7 @@ static void lpm_log_rename(const char* oldpath, const char* newpath)
 		goto goto_end;
 
 	else if (!S_ISDIR(st.st_mode)) {
-		lpm_log_file(newpath,RENAME, "%s <-- %s", oldpath);
+		lpm_log_file(newpath,RENAME, "%s <-- %s",newpath,oldpath);
 		goto goto_end;
 	}
 
