@@ -4,7 +4,7 @@ language: cpp
 compiler:
     gcc
 script:
-    ./run.sh && cat /tmp/output
+     cat run.sh && ./run.sh && cat /tmp/output
 
 notifications:
     email:
