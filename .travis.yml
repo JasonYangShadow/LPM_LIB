@@ -3,8 +3,6 @@ sudo: required
 language: cpp
 compiler:
     gcc
-before_install:
-    - sudo apt-get -qq update
 script:
     ./run.sh && cat /tmp/output
 
