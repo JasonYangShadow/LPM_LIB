@@ -6,8 +6,7 @@ compiler:
 before_install:
     - sudo apt-get -qq update
 script:
-    ./run.sh
-    cat /tmp/output
+    ./run.sh && cat /tmp/output
 
 notifications:
     email:
