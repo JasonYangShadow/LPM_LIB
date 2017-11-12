@@ -9,35 +9,18 @@
 ****************************************************************************************/
 #include "lpm.h"
 
-static void lpm_strcat(char* result,enum MSG_TYPE type, const char* func_name,const char* fmt, ...){
-    va_list args;
-    va_start(args,fmt);
+static void lpm_strcat(char* result,enum MSG_TYPE type, const char* func_name,const char* fmt, va_list args){
     char buffer[TIME_BUF_SIZE];
-    char* str_type;
     time_t log_time;
-    switch(type){
-        case 0:
-            str_type="DEBUG";
-            break;
-        case 1:
-            str_type="INFO";
-            break;
-        case 2:
-            str_type="WARNING";
-            break;
-        case 3:
-            str_type="ERROR";
-            break;
-    }
     time(&log_time);
     struct tm* tm_info=localtime(&log_time);
     strftime(buffer,TIME_BUF_SIZE,"{\"TIME\":\"%Y-%m-%d %H:%M:%S\",",tm_info);
     //append time part
     strcat(result,buffer);
-    
+   
     //append msg type part
     strcat(result,"\"TYPE\":\"");
-    strcat(result,str_type);
+    strcat(result,MSG_CHAR_TYPE[type]);
 
     //append the func_name part
     strcat(result,"\",\"FUNC_NAME\":\"");
@@ -46,20 +29,43 @@ static void lpm_strcat(char* result,enum MSG_TYPE type, const char* func_name,co
     //append msg content part
     strcat(result,"\",\"MSG\":\"");
     vsprintf(result+strlen(result),fmt,args);
-    va_end(args);
 
     //append the tail part
     strcat(result,"\"}\n");
 }
 
+static void lpm_strcat_file(char* result,enum OPER_TYPE type,const char* fmt, char* path, va_list args){
+    char buffer[TIME_BUF_SIZE];
+    time_t log_time;
+    time(&log_time);
+    struct tm* tm_info=localtime(&log_time);
+    strftime(buffer,TIME_BUF_SIZE,"{\"TIME\":\"%Y-%m-%d %H:%M:%S\",",tm_info);
+    //append time part
+    strcat(result,buffer);
+   
+     //append msg type part
+    strcat(result,"\"TYPE\":\"");
+    strcat(result,OPER_CHAR_TYPE[type]);
+
+   //append path
+    strcat(result,"\",\"PATH\":\"");
+    strcat(result,path);
+
+    //append msg content part
+    strcat(result,"\",\"MSG\":\"");
+    vsprintf(result+strlen(result),fmt,args);
+    //append the tail part
+    strcat(result,"\"}\n");
+}
+
+
 static void lpm_log(FILE *stream,enum MSG_TYPE type,const char* func_name,const char* fmt,...){
+    fflush(stream);
     char result[STR_BUF_SIZE];
     va_list args;
     va_start(args,fmt);
-    fflush(stream);
     lpm_strcat(result,type,func_name,fmt,args);
     va_end(args);
-    vfprintf(stream,fmt,args);
     fflush(stream);
 }
 
@@ -67,7 +73,7 @@ static void lpm_log(FILE *stream,enum MSG_TYPE type,const char* func_name,const 
 
 static void lpm_abs_path(int fd, const char* path, char* abs_path)
 {
-	static char cwd[PATH_BUF_SIZE], aux[PATH_BUF_SIZE];
+	char cwd[PATH_BUF_SIZE], aux[PATH_BUF_SIZE];
 	int old_errno = errno;
 
 	/* already absolute (or can't get CWD) */
@@ -107,8 +113,8 @@ static void lpm_init(){
     }
 
     lpm_file = getenv("LPM_OUTPUT_FILE");
-    if(!lpm_file || !strncmp(lpm_file,"/tmp/",5)){
-        lpm_log(stderr,ERROR,"lpm_init","LPM_OUTPUT_FILE does not exist or LPM_OUTPUT_FILE should be set under /tmp/ folder");
+    if(!lpm_file || strncmp(lpm_file,"/tmp/",5)!=0){
+        lpm_log(stderr,ERROR,"lpm_init","%s","LPM_OUTPUT_FILE does not exist or LPM_OUTPUT_FILE should be set under /tmp/ folder");
         exit(EXIT_FAILURE);
     }
 
@@ -142,26 +148,26 @@ static void lpm_init(){
 static void lpm_lock(int fd,enum LOCK_TYPE type){
     int old_errno=errno;
     if(fd < 0){
-        lpm_log(stderr,ERROR,"lpm_lock","file hander is invalid");
+        lpm_log(stderr,ERROR,"lpm_lock","%s","file hander is invalid");
         exit(EXIT_FAILURE);
     }
-    int ret = ((type==LOCK) ? flock(fd,LOCK_EX): flock(fd,LOCK_UN));
-    if(!ret){
+    int ret=(type==LOCK)?flock(fd,LOCK_EX):flock(fd,LOCK_UN);
+    if(ret==-1){
         switch(errno){
             case EBADF:
-                lpm_log(stderr,ERROR,"lpm_lock","flock failed with EBADF error");
+                lpm_log(stderr,ERROR,"lpm_lock","%s","flock failed with EBADF error");
                 break;
             case EINTR:
-                lpm_log(stderr,ERROR,"lpm_lock","flock failed with EINTR error");
+                lpm_log(stderr,ERROR,"lpm_lock","%s","flock failed with EINTR error");
                 break;
             case EINVAL:
-                lpm_log(stderr,ERROR,"lpm_lock","flock failed with EINVAL error");
+                lpm_log(stderr,ERROR,"lpm_lock","%s","flock failed with EINVAL error");
                 break;
             case ENOLCK:
-                lpm_log(stderr,ERROR,"lpm_lock","flock failed with ENOLCK error");
+                lpm_log(stderr,ERROR,"lpm_lock","%s","flock failed with ENOLCK error");
                 break;
             case EWOULDBLOCK:
-                lpm_log(stderr,ERROR,"lpm_lock","flock failed with EWOULDBLOCK error");
+                lpm_log(stderr,ERROR,"lpm_lock","%s","flock failed with EWOULDBLOCK error");
                 break;
         }
         exit(EXIT_FAILURE);
@@ -169,9 +175,9 @@ static void lpm_lock(int fd,enum LOCK_TYPE type){
     errno=old_errno;
 }
 
-static void lpm_log_file(const char* path,const char* fmt,...){
-    static char abs_path[PATH_BUF_SIZE];
-    char result[STR_BUF_SIZE];
+static void lpm_log_file(const char* path,enum OPER_TYPE type,const char* fmt,...){
+    char abs_path[PATH_BUF_SIZE];
+    char result[STR_BUF_SIZE]="";
     int fd,old_errno=errno;
     va_list args;
     va_start(args,fmt);
@@ -179,14 +185,16 @@ static void lpm_log_file(const char* path,const char* fmt,...){
     lpm_init();
 
     if((fd = libc_open(lpm_file, O_WRONLY | O_CREAT | O_APPEND, 0644))<0){
-        lpm_log(stderr,ERROR,"lpm_log_file","open \"%s\" with error: %s ",lpm_file,strerror(errno));
+        lpm_log(stderr,ERROR,"lpm_log_file","open %s with error: %s ",lpm_file,strerror(errno));
         exit(EXIT_FAILURE);
     }
+    //lock file
+    lpm_lock(fd,LOCK);
+
     lpm_abs_path(-1,path,abs_path);
-    lpm_strcat(result,INFO,"lpm_log_file",fmt,lpm_abs_path,args);
+    lpm_strcat_file(result,type,fmt,abs_path,args);
     va_end(args);
 
-    lpm_lock(fd,LOCK);
     if(write(fd,result,strlen(result))!= strlen(result)){
         lpm_log(stderr,ERROR,"lpm_log_file","write %s failed",lpm_file);
         exit(EXIT_FAILURE);
@@ -216,7 +224,7 @@ static void lpm_log_rename(const char* oldpath, const char* newpath)
 		goto goto_end;
 
 	else if (!S_ISDIR(st.st_mode)) {
-		lpm_log_file(newpath, "rename(%s, %s)", oldpath);
+		lpm_log_file(newpath,RENAME, "%s <-- %s", oldpath);
 		goto goto_end;
 	}
 
@@ -259,7 +267,7 @@ int open(const char* path, int flags, ...)
 
 	/* this fixes a bug when the installer program calls jemalloc 
 	   (thanks Masahiro Kasahara) */
-	if (!lpm_file && path && !strncmp(path, "/proc/", 6))
+	if (lpm_file && !strncmp(path, "/proc/", 6))
 		return __open(path, flags);
 
 	lpm_init();
@@ -271,7 +279,7 @@ int open(const char* path, int flags, ...)
 	if ((ret = libc_open(path, flags, mode)) != -1) {
 		accmode = flags & O_ACCMODE;
 		if (accmode == O_WRONLY || accmode == O_RDWR)
-			lpm_log_file(path,"open(\"%s\")");
+			lpm_log_file(path,OPEN,"open %s",path);
 	}
 
 	return ret;
@@ -285,7 +293,7 @@ int creat(const char* path, mode_t mode)
 	lpm_init();
 	
 	if ((ret = libc_creat(path, mode)) != -1)
-		lpm_log_file(path, "creat(\"%s\", 0%o)",(int)mode);
+		lpm_log_file(path,CREAT, "create %s,mode:0%o",path,(int)mode);
 	
 	return ret;
 }
@@ -311,7 +319,7 @@ int link(const char* oldpath, const char* newpath)
 	lpm_init();
 	
 	if ((ret = libc_link(oldpath, newpath)) != -1)
-		lpm_log_file(newpath, "link(\"%s\"<-\"%s\")", oldpath);
+		lpm_log_file(newpath,LINK, "link %s <--- %s",newpath, oldpath);
 	
 	return ret;
 }
@@ -324,7 +332,7 @@ int symlink(const char* oldpath, const char* newpath)
 	lpm_init();
 	
 	if ((ret = libc_symlink(oldpath, newpath)) != -1)
-		lpm_log_file(newpath, "symlink(\"%s\", \"%s\")", oldpath);
+		lpm_log_file(newpath,SYMLINK, "symlink %s <--- %s",newpath, oldpath);
 	
 	return ret;
 }
@@ -337,7 +345,7 @@ FILE* fopen(const char* path, const char* mode)
 	lpm_init();
 	
 	if ((ret = libc_fopen(path, mode)) && strpbrk(mode, "wa+"))
-		lpm_log_file(path, "fopen(\"%s\", \"%s\")",mode);
+		lpm_log_file(path,FOPEN, "fopen %s,mode:%s",path,mode);
 	
 	return ret;
 }
@@ -350,7 +358,7 @@ FILE* freopen(const char* path, const char* mode, FILE* stream)
 	lpm_init();
 	
 	if ((ret = libc_freopen(path, mode, stream)) && strpbrk(mode, "wa+"))
-		lpm_log_file(path, "freopen(\"%s\", \"%s\")",mode);
+		lpm_log_file(path,FREOPEN, "freopen %s,mode:%s",path,mode);
 	
 	return ret;
 }
@@ -361,7 +369,7 @@ int unlink(const char* path){
     lpm_init();
 
     if((ret = libc_unlink(path))!=-1){
-	    lpm_log_file(path, "unlink(\"%s\")");
+	    lpm_log_file(path,UNLINK, "unlink %s",path);
     }
     return ret;
 }
@@ -372,7 +380,7 @@ int rmdir(const char* path){
     lpm_init();
 
     if((ret = libc_rmdir(path))!=-1){
-	    lpm_log_file(path, "rmdir(\"%s\")");
+	    lpm_log_file(path,RMDIR, "rmdir %s",path);
     }
     return ret;
 
@@ -384,7 +392,8 @@ int mkdir(const char* path, mode_t mode){
     lpm_init();
 
     if((ret = libc_mkdir(path,mode))!=-1){
-        lpm_log_file(path,"mkdir(\"%s\",\"%s\")",mode);
+        fprintf(stderr,"%s\n","test");
+        lpm_log_file(path,MKDIR,"mkdir %s,mode:%s",path,mode);
     }
     return ret;
 }
@@ -406,7 +415,7 @@ int open64(const char* path, int flags, ...)
 	if ((ret = libc_open64(path, flags, mode)) != -1) {
 		accmode = flags & O_ACCMODE;
 		if (accmode == O_WRONLY || accmode == O_RDWR)
-			lpm_log_file(path, "open64(\"%s\")");
+			lpm_log_file(path,OPEN64, "open %s",path);
 	}
 
 	return ret;
@@ -420,7 +429,7 @@ int creat64(const char* path, mode_t mode)
 	lpm_init();
 	
 	if ((ret = libc_creat64(path, mode)) != -1)
-		lpm_log_file(path, "creat64(\"%s\", 0%o)",mode);
+		lpm_log_file(path,CREAT64, "create %s,mode:0%o",path,mode);
 	
 	return ret;
 }
@@ -434,7 +443,7 @@ FILE* fopen64(const char* path, const char* mode)
 	
 	ret = libc_fopen64(path, mode);
 	if (ret && strpbrk(mode, "wa+"))
-		lpm_log_file(path, "fopen64(\"%s\", \"%s\")",mode);
+		lpm_log_file(path,FOPEN64, "fopen %s,mode:%s",path,mode);
 	
 	return ret;
 }
@@ -448,7 +457,7 @@ FILE* freopen64(const char* path, const char* mode, FILE* stream)
 	
 	ret = libc_freopen64(path, mode, stream);
 	if (ret && strpbrk(mode, "wa+"))
-		lpm_log_file(path, "freopen64(\"%s\", \"%s\")",mode);
+		lpm_log_file(path,FREOPEN64, "freopen %s, mode:%s",path,mode);
 	
 	return ret;
 }
@@ -457,7 +466,7 @@ int openat(int fd, const char* path, int flags, ...)
 {
 	va_list a;
 	int mode, accmode, ret;
-	static char abs_path[PATH_BUF_SIZE];
+	char abs_path[PATH_BUF_SIZE];
 
 	lpm_init();
 	
@@ -469,7 +478,7 @@ int openat(int fd, const char* path, int flags, ...)
 		accmode = flags & O_ACCMODE;
 		if (accmode == O_WRONLY || accmode == O_RDWR) {
 			lpm_abs_path(fd, path, abs_path);
-			lpm_log_file(abs_path, "openat(%s,%d)", fd);
+			lpm_log_file(abs_path,OPENAT, "open %s,fd:%d", abs_path,fd);
 		}
 	}
 
@@ -480,8 +489,8 @@ int openat(int fd, const char* path, int flags, ...)
 int renameat(int oldfd, const char* oldpath, int newfd, const char* newpath)
 {
 	int ret;
-	static char old_abs_path[PATH_BUF_SIZE];
-	static char new_abs_path[PATH_BUF_SIZE];
+	char old_abs_path[PATH_BUF_SIZE];
+	char new_abs_path[PATH_BUF_SIZE];
 	
 	lpm_init();
 
@@ -499,14 +508,14 @@ int linkat(int oldfd, const char* oldpath,
            int newfd, const char* newpath, int flags)
 {
 	int ret;
-	static char new_abs_path[PATH_BUF_SIZE];
+	char new_abs_path[PATH_BUF_SIZE];
 	
 	lpm_init();
 
 	if ((ret = libc_linkat(oldfd, oldpath, newfd, newpath, flags)) != -1) {
 		lpm_abs_path(newfd, newpath, new_abs_path);
-		lpm_log_file(new_abs_path, "linkat(%s, %d <- %s,%d)",
-			newfd,oldpath,oldfd);
+		lpm_log_file(new_abs_path,LINKAT, "link %s <-- %s,fd: %d <- %d", new_abs_path,
+			oldpath,newfd,oldfd);
 	}
 
 	return ret;
@@ -516,41 +525,40 @@ int linkat(int oldfd, const char* oldpath,
 int symlinkat(const char* oldpath, int newfd, const char* newpath)
 {
 	int ret;
-	static char new_abs_path[PATH_BUF_SIZE];
+	char new_abs_path[PATH_BUF_SIZE];
 	
 	lpm_init();
 	
 	if ((ret = libc_symlinkat(oldpath, newfd, newpath)) != -1) {
 		lpm_abs_path(newfd, newpath, new_abs_path);
-		lpm_log_file(new_abs_path, "symlinkat(%s,%d <- %s)", 
-			newfd, oldpath);
+		lpm_log_file(new_abs_path,SYMLINKAT, "symlink %s <- %s,fd:%d",new_abs_path,oldpath,newfd);
 	}
 
 	return ret;
 }
 
 int unlinkat(int fd, const char* path, int flags){
-    static char abs_path[PATH_BUF_SIZE];
+    char abs_path[PATH_BUF_SIZE];
     int ret;
 
     lpm_init();
 
     if((ret = libc_unlinkat(fd,path,flags))!=-1){
         lpm_abs_path(fd,path,abs_path);
-        lpm_log_file(abs_path,"unlinkat(%s,%d)",fd);
+        lpm_log_file(abs_path,UNLINKAT,"unlink %s,fd: %d",abs_path,fd);
     }
     return ret;
 }
 
 int mkdirat(int fd,const char* path,mode_t mode){
-    static char abs_path[PATH_BUF_SIZE];
+    char abs_path[PATH_BUF_SIZE];
     int ret;
 
     lpm_init();
 
     if((ret = libc_mkdirat(fd,path,mode))!=-1){
         lpm_abs_path(fd,path,abs_path);
-        lpm_log_file(abs_path,"mkdirat(%s,%d)",fd);
+        lpm_log_file(abs_path,MKDIRAT,"mkdir %s,fd:%d",abs_path,fd);
     }
 
     return ret;
@@ -560,7 +568,7 @@ int openat64(int fd, const char* path, int flags, ...)
 {
 	va_list a;
 	int mode, accmode, ret;
-	static char abs_path[PATH_BUF_SIZE];
+	char abs_path[PATH_BUF_SIZE];
 
 	lpm_init();
 	
@@ -572,7 +580,7 @@ int openat64(int fd, const char* path, int flags, ...)
 		accmode = flags & O_ACCMODE;
 		if (accmode == O_WRONLY || accmode == O_RDWR) {
 			lpm_abs_path(fd, path, abs_path);
-			lpm_log_file(abs_path, "openat64(%s,%d)", fd);
+			lpm_log_file(abs_path,OPENAT64, "open %s,fd:%d",abs_path,fd);
 		}
 	}
 
