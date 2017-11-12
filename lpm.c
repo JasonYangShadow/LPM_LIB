@@ -66,6 +66,7 @@ static void lpm_log(FILE *stream,enum MSG_TYPE type,const char* func_name,const 
     va_start(args,fmt);
     lpm_strcat(result,type,func_name,fmt,args);
     va_end(args);
+    fprintf(stream,"%s",result);
     fflush(stream);
 }
 
