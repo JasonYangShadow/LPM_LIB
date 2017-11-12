@@ -293,7 +293,7 @@ int creat(const char* path, mode_t mode)
 	lpm_init();
 	
 	if ((ret = libc_creat(path, mode)) != -1)
-		lpm_log_file(path,CREAT, "create %s,mode:0%o",path,(int)mode);
+		lpm_log_file(path,CREAT, "create %s,mode:%o",path,mode);
 	
 	return ret;
 }
@@ -392,8 +392,7 @@ int mkdir(const char* path, mode_t mode){
     lpm_init();
 
     if((ret = libc_mkdir(path,mode))!=-1){
-        fprintf(stderr,"%s\n","test");
-        lpm_log_file(path,MKDIR,"mkdir %s,mode:%s",path,mode);
+        lpm_log_file(path,MKDIR,"mkdir %s,mode:%o",path,mode);
     }
     return ret;
 }
@@ -558,7 +557,7 @@ int mkdirat(int fd,const char* path,mode_t mode){
 
     if((ret = libc_mkdirat(fd,path,mode))!=-1){
         lpm_abs_path(fd,path,abs_path);
-        lpm_log_file(abs_path,MKDIRAT,"mkdir %s,fd:%d",abs_path,fd);
+        lpm_log_file(abs_path,MKDIRAT,"mkdir %s,mode:%o",abs_path,fd);
     }
 
     return ret;
