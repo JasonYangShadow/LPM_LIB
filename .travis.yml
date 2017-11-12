@@ -1,0 +1,14 @@
+dist: trusty
+sudo: required
+language: cpp
+compiler:
+    gcc
+before_install:
+    - sudo apt-get -qq update
+script:
+    ./run.sh
+
+notifications:
+    email:
+        on_success: never
+        on_failure: always
