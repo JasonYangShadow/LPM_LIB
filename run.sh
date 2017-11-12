@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export LPM_OUTPUT_FILE=/tmp/output
 gcc -c -Wall -Werror -fpic lpm.c 
 gcc -shared -o liblpm.o lpm.o -ldl
 LD_PRELOAD=./liblpm.o /usr/bin/touch file
