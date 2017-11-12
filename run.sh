@@ -2,8 +2,6 @@
 
 gcc -c -Wall -Werror -fpic lpm.c 
 gcc -shared -o liblpm.o lpm.o -ldl
-gcc -shared -o liblpm.o lpm.o -ldl
-LD_PRELOAD=./liblpm.o /bin/ls -al > /tmp/ls 
 LD_PRELOAD=./liblpm.o /usr/bin/touch file
 LD_PRELOAD=./liblpm.o /bin/ln -s file file_ln
 LD_PRELOAD=./liblpm.o /bin/mv file file.log
